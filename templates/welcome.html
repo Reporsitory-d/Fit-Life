@@ -74,7 +74,8 @@ nav ul li a:hover {
 }
 
 .btn-beginner,
-.btn-advanced {
+.btn-advanced,
+.btn-inter {
     display: block;
     margin: 10px auto;
     padding: 10px 20px;
@@ -112,12 +113,18 @@ nav ul li a:hover {
                 <li><a href="/beginner">Beginner</a></li>
                 <li><a href="/advanced">Advanced</a></li>
                 <!-- <li><a href="/insight">Insight</a></li> -->
+                {% if session.get('user_id') %}
+                <li><a href="/logout">Logout</a></li>
+                {% else %}
+                <li><a href="/login">Login</a></li>
+                {% endif %}
             </ul>
         </nav>
     </header>
     <div class="welcome-container">
         <a class="btn-beginner" href="/beginner">Beginner</a>
         <a class="btn-advanced" href="/advanced">Advanced</a>
+       
     </div>
 </body>
 

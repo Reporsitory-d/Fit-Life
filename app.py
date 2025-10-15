@@ -1,11 +1,62 @@
 import json, os
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 import pandas as pd
-from pymongo import MongoClient
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel, cosine_similarity
 
 app = Flask(__name__, static_url_path='/static')
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
+
+# Persistent user store (JSON file)
+users_file_path = os.path.join(os.path.dirname(__file__), 'data', 'users.json')
+
+def _load_users():
+    try:
+        if os.path.exists(users_file_path):
+            with open(users_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception:
+        pass
+    return {}
+
+def _save_users(users_dict):
+    os.makedirs(os.path.dirname(users_file_path), exist_ok=True)
+    with open(users_file_path, 'w', encoding='utf-8') as f:
+        json.dump(users_dict, f)
+
+USERS = _load_users()
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped_view(*args, **kwargs):
+        if not session.get('user_id'):
+            flash('Please log in to continue.', 'warning')
+            return redirect(url_for('login', next=request.path))
+        return view_func(*args, **kwargs)
+    return wrapped_view
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip().lower()
+        password = request.form.get('password', '')
+        user_hash = USERS.get(username)
+        if user_hash and check_password_hash(user_hash, password):
+            session['user_id'] = username
+            next_url = request.args.get('next') or url_for('welcome')
+            return redirect(next_url)
+        flash('Invalid username or password.', 'danger')
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
 
 # data directory
 data_dir = os.path.join(os.path.dirname(__file__), 'data')
@@ -34,17 +85,11 @@ df = pd.read_csv(csv_cleaned_file_path)
 # Convert the 'images' field from a string to a list and strip single quotes
 df['images'] = df['images'].apply(lambda x: [image.strip(" '") for image in x.strip("[]").split(", ")])
 
-# Connect to MongoDB
-client = MongoClient("mongodb://localhost:27017/")
-db = client["exercisesdb"]
-collection = db["exercises"]
-
-# # Drop the collection
-# collection.drop()
-
-# Insert the CSV data into MongoDB
-df_dict = df.to_dict(orient='records')
-collection.insert_many(df_dict)
+# Build an in-memory lookup by exercise id (string keys)
+id_to_exercise = {}
+for _, row in df.iterrows():
+    record = row.to_dict()
+    id_to_exercise[str(record.get('id'))] = record
 
 # Define the priority for user input fields
 priority_fields = ['primaryMuscles','level', 'equipment', 'secondaryMuscles', 'force', 'mechanic', 'category']
@@ -75,6 +120,27 @@ def welcome():
 def welcome_page():
     return render_template('welcome.html')
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip().lower()
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm', '')
+        if not username or not password:
+            flash('Email and password are required.', 'warning')
+            return render_template('register.html')
+        if password != confirm:
+            flash('Passwords do not match.', 'warning')
+            return render_template('register.html')
+        if USERS.get(username):
+            flash('Account already exists. Please login.', 'info')
+            return redirect(url_for('login'))
+        USERS[username] = generate_password_hash(password)
+        _save_users(USERS)
+        flash('Account created. Please login.', 'success')
+        return redirect(url_for('login'))
+    return render_template('register.html')
+
 @app.route('/beginner', methods=['GET', 'POST'])
 def beginner():
     primary_muscles = ["Chest", "Biceps", "Abdominals", "Quadriceps", "Middle Back", "Glutes", "Hamstrings", "Calves "]
@@ -104,6 +170,7 @@ def advanced():
     return render_template('advanced.html', primary_muscles=primary_muscles, selectedPrimaryMuscle=selected_primary_muscle)
 
 @app.route('/recommend', methods=['GET', 'POST'])
+@login_required
 def recommend_exercises():
     exercise_data = []
     user_input = {}
@@ -142,11 +209,15 @@ def recommend_exercises():
         exercise_ids = [str(df.iloc[index]["id"]) for index in exercise_indices]
 
         for exercise_id in exercise_ids:
-            exercise_doc = collection.find_one({"id": exercise_id})
+            exercise_doc = id_to_exercise.get(exercise_id)
             if exercise_doc:
-                if 'instructions' in exercise_doc:
+                # Ensure instructions is always a string
+                if 'instructions' in exercise_doc and isinstance(exercise_doc['instructions'], str):
                     # Replace "\n" with "<br>" to add line breaks in the instructions
                     exercise_doc['instructions'] = exercise_doc['instructions'].replace('.,', '<br>')
+                else:
+                    # Set default instructions if missing or not a string
+                    exercise_doc['instructions'] = 'No instructions available.'
                 exercise_data.append(exercise_doc)
 
         # Render the recommendations template with the results
@@ -159,6 +230,7 @@ def recommend_exercises():
 cosine_sim_items = cosine_similarity(tfidf_matrix.T, tfidf_matrix.T)
 
 @app.route('/more_recommendations', methods=['GET', 'POST'])
+@login_required
 def more_recommendations():
     exercise_data = []
     selected_primary_muscle = ""
@@ -197,11 +269,15 @@ def more_recommendations():
         exercise_ids = [str(df.iloc[index]["id"]) for index in exercise_indices]
 
         for exercise_id in exercise_ids:
-            exercise_doc = collection.find_one({"id": exercise_id})
+            exercise_doc = id_to_exercise.get(exercise_id)
             if exercise_doc:
-                if 'instructions' in exercise_doc:
+                # Ensure instructions is always a string
+                if 'instructions' in exercise_doc and isinstance(exercise_doc['instructions'], str):
                     # Replace "\n" with "<br>" to add line breaks in the instructions
                     exercise_doc['instructions'] = exercise_doc['instructions'].replace('.,', '<br>')
+                else:
+                    # Set default instructions if missing or not a string
+                    exercise_doc['instructions'] = 'No instructions available.'
                 exercise_data.append(exercise_doc)
 
         # Render the more_recommendations template with the results
@@ -212,4 +288,4 @@ def more_recommendations():
     return render_template('more_recommendations.html', recommendations=exercise_data, user_input=user_input,
                            selectedPrimaryMuscle=selected_primary_muscle)
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='127.0.0.1', port=int(os.environ.get('PORT', 5000)))

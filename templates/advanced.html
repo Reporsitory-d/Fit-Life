@@ -346,8 +346,7 @@
                         {% endfor %}
                     </div>
                     <div class="column">
-                        {% set secondary_muscles = ['Forearms','Glutes', 'Hamstrings', 'Lats', 'Lower Back', 'Middle
-                        Back'] %}
+                        {% set secondary_muscles = ['Forearms','Glutes', 'Hamstrings', 'Lats', 'Lower Back', 'Middle Back'] %}
                         {% for muscle in secondary_muscles %}
                         <label for="{{ muscle }}">
                             <input type="checkbox" name="secondaryMuscles[]" value="{{ muscle }}" id="{{ muscle }}">

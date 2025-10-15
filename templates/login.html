@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Login - Fitlife</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+	<style>
+		/* Ensure content appears in a clear vertical sequence */
+		.container { max-width: 420px; margin: 40px auto; display: flex; flex-direction: column; gap: 14px; }
+		.header { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+		.header img { width: 96px; height: auto; }
+		form { display: flex; flex-direction: column; gap: 10px; }
+		label { font-weight: 600; }
+		input { padding: 10px; }
+		button { padding: 10px 14px; font-weight: 700; cursor: pointer; }
+		
+		/* Password container with eye icon */
+		.password-container { position: relative; }
+		.password-container input { padding-right: 40px; width: 100%; box-sizing: border-box; }
+		.password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; background: none; border: none; font-size: 18px; color: #666; }
+		.password-toggle:hover { color: #333; }
+		.flashes { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+		.flash { padding: 8px 10px; border-radius: 4px; }
+		.flash.success { background: #e6ffed; }
+		.flash.warning { background: #fff8e1; }
+		.flash.danger { background: #ffebee; }
+		.subtitle { color: #666; font-size: 0.95rem; text-align: center; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="header">
+			<img src="{{ url_for('static', filename='logo.jpg') }}" alt="TailoredFit Logo">
+			<h1>Login</h1>
+			<p class="subtitle">Sign in to access your personalized home workouts.</p>
+		</div>
+		{% with messages = get_flashed_messages(with_categories=true) %}
+			{% if messages %}
+				<ul class="flashes">
+				{% for category, message in messages %}
+					<li class="flash {{ category }}">{{ message }}</li>
+				{% endfor %}
+				</ul>
+			{% endif %}
+		{% endwith %}
+		<form method="post" action="{{ url_for('login', next=request.args.get('next')) }}">
+			<label for="username">Email</label>
+			<input type="email" id="username" name="username" required>
+
+			<label for="password">Password</label>
+			<div class="password-container">
+				<input type="password" id="password" name="password" required>
+				<button type="button" class="password-toggle" onclick="togglePassword()"></button>
+			</div>
+
+			<button type="submit">Sign in</button>
+		</form>
+		<p>Don't have an account? <a href="{{ url_for('register') }}">Create one</a>.</p>
+	</div>
+	
+	<script>
+		function togglePassword() {
+			const passwordInput = document.getElementById('password');
+			const toggleButton = document.querySelector('.password-toggle');
+			
+			if (passwordInput.type === 'password') {
+				passwordInput.type = 'text';
+				toggleButton.textContent = '🙈';
+			} else {
+				passwordInput.type = 'password';
+				toggleButton.textContent = '👁️';
+			}
+		}
+	</script>
+</body>
+</html>

@@ -353,7 +353,7 @@
                     <div class="column">
                         {% set equipment_options = ['Dumbbell', 'Exercise Ball', 'E-Z Curl Bar', 'Foam Roll'] %}
                         {% for option in equipment_options %}
-                        <label for "{{ option }}">
+                        <label for="{{ option }}">
                             <input type="radio" name="equipment" value="{{ option }}" id="{{ option }}">
                             {{ option | capitalize }}
                         </label>
